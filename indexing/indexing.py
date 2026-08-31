@@ -1,10 +1,9 @@
-import os 
+import os
 from dotenv import load_dotenv
-from langchain.chat_models import init_chat_model
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
 from pathlib import Path
 from config import settings
 
@@ -15,47 +14,56 @@ load_dotenv()
 if not os.getenv("OPENAI_API_KEY"):
     raise ValueError("API KEY not defined")
 
+def load_pdf():
+    try:
+        # load pdf
+        pdf_path = Path(__file__).parent.parent / "data" / "attention.pdf"
+        loader = PyPDFLoader(str(pdf_path))
+        docs = loader.load()
+        return docs
+    except Exception as e:
+            raise RuntimeError("Error in pdf data load !") from e
+    
+def split_and_chunk(docs):
+    try:
+        if docs is None or len(docs) == 0: 
+            raise ValueError("docs cannot be empty!!, Empty docs passed")
+        else :
+            #split and chunk doc
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=settings.chunk_size,
+                chunk_overlap=settings.chunk_overlap
+            )
+            chunks = splitter.split_documents(docs)
+            print(len(chunks))
+            return chunks
+    except Exception as e:
+            raise RuntimeError("Error in splitting data") from e
+        
+    
+def persist_in_chroma(chunks):
+    try:
+        if chunks is None or len(chunks) == 0:
+            raise ValueError("chunks empty!")
+        #Embedding
+        embedding = OpenAIEmbeddings(
+            model=settings.embedding_model
+        )
+        #Vectorization and Vector DB store
+        vector_store = Chroma(
+            collection_name="basic_rag_pipeline",
+            embedding_function=embedding,
+            persist_directory="./chroma_db"
+        )
+        vector_store.add_documents(chunks)
+        return vector_store
+    except Exception as e:
+        raise RuntimeError("Error in persistence in chroma db!!") from e
+        
+    
+if __name__ == "__main__":
+    docs = load_pdf()
+    chunks = split_and_chunk(docs)
+    vector_store = persist_in_chroma(chunks)
 
-# model initialize
-model = init_chat_model(model=settings.model, temperature=0.6)
 
-
-# load pdf
-pdf_path = Path(__file__).parent.parent / "data" / "attention.pdf"
-loader = PyPDFLoader(str(pdf_path))
-docs = loader.load()
-
-print(len(docs))
-
-#split and chunk doc
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=settings.chunk_size,
-    chunk_overlap=settings.chunk_overlap
-)
-chunks = splitter.split_documents(docs)
-print(len(chunks))
-
-#Embedding
-embedding = OpenAIEmbeddings(
-    model=settings.embedding_model
-)
-
-#Vectorization
-texts = [chunk.content for chunk in chunks]
-vector = embedding.embed_documents(texts)
-print(vector)
-
-
-
-
-def generate_terms_and_jokes(context):
-    prompt_comedy_about = ChatPromptTemplate.from_messages([
-        ("system" ,"You are a comedian, I will first give you a topic, you will have to produce some terms, but maximum 3. And each of these terms, should be one single word"),
-        ("user" , "generate for  {context}")
-    ])
-    prompt_comedy_on_terms = ChatPromptTemplate.from_template("tell me a joke on these terms : {terms}")
-    about_chain = prompt_comedy_about | model
-    terms = about_chain.invoke(context)
-    term_chain = prompt_comedy_on_terms | model
-    response = term_chain.invoke({"terms" : terms.content})
-    return terms.content, response.content

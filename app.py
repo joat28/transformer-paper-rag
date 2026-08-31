@@ -1,16 +1,16 @@
 import streamlit as st
-from indexing.indexing import generate_terms_and_jokes
+from retrieval.retrieval import generate_results
 
-st.header("Comedy Generator AI")
-comedy_term = st.text_input("Enter something")
 
-if st.button("Generate Terms and Joke on selected term") and comedy_term != None :
-    with st.spinner("Generating .. Jokes .. "):
-        terms, joke = generate_terms_and_jokes(comedy_term)
-    
-    st.subheader("Generated Terms")
-    st.write(terms)
-    st.subheader("Joke")
-    st.write(joke)
-    
+st.header("Attention Paper QnA")
 
+question = st.text_input("Enter a question to search:")
+
+if st.button("Get Answer") and question.strip():
+    with st.spinner("Reading paper..."):
+        response = generate_results(question)
+    st.subheader("Results:")
+    st.markdown(
+        response,
+        unsafe_allow_html=False
+    )
